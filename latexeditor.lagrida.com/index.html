@@ -1,0 +1,2681 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Online LaTeX Equation Editor</title>
+	<meta http-equiv="Content-type" content="text/html; charset=UTF-8" />
+	<meta name="description" content="Online LaTeX equation editor, free LaTeX equation generator (png, pdf, mathML, ...), generate your complex mathematical expressions with simple clicks." />
+	<meta property="og:url" content="../" />
+	<meta property="og:type" content="" />
+	<meta property="og:title" content="Online LaTeX Equation Editor" />
+	<meta property="og:description"
+		  content="Online LaTeX equation editor, free LaTeX equation generator (png, pdf, mathML, ...), generate your complex mathematical expressions with simple clicks." />
+	<meta property="og:image" content="../og_latex_latest.png" />
+	<meta property="og:image:width" content="935" />
+	<meta property="og:image:height" content="530" />
+	<meta name="msvalidate.01" content="F008FD209451F067D6A17B94F218B0C6" />
+	<link rel="stylesheet" href="./public/styles/defaulte1af.css" />
+	<style>
+		#login_register_section{
+			display: none;
+		}
+		#profile_section{
+			display: none;
+		}
+		#latex_codes_section{
+			display: none;
+		}
+		#pagination_section{
+			display: none;
+		}
+
+	</style>
+
+	<script>
+		MathJax = {
+			tex: {
+				inlineMath: [ ["$", "$"]],
+				displayMath: [ ["$$","$$"]],
+				processEscapes: false,
+				packages: {
+					'[+]': ['physics', 'color', 'bbox', 'cancel', 'mhchem', 'noundefined', ]
+				}
+			},
+			loader: {
+				load: ['[tex]/physics', '[tex]/color', '[tex]/bbox', '[tex]/cancel', '[tex]/mhchem', '[tex]/noundefined']
+			},
+			tags: 'ams'
+		};
+	</script>
+	<script id="MathJax-script" async src="../npm/mathjax@3/es5/tex-mml-svg.js"></script>
+	<script src="./public/scripts/new_fetch.js"></script>
+</head>
+<body>
+<script>
+	if ( window.self !== window.top ) {
+		window.top.location.href=window.location.href;
+	}
+	// backend variables-------------------------------------------
+	const latexURL = '../';
+	const baseURL = '../api/';
+	const URLS = {
+		REGISTER: baseURL + 'register',
+		LOGIN: baseURL + 'login',
+		LOGOUT: baseURL + 'logout',
+		FORGOT_PASSWORD: baseURL + 'forgot_password',
+		ADD_LATEX: baseURL + 'add_latex',
+		GET_PDF: baseURL + 'get_pdf',
+		PDF_PATH: latexURL + 'public/pdf/'
+	}
+	const TOKEN_NAME = 'lagrida_latex_token';
+	//-----------------------------------------------------------------------
+	let forgotPasswordCaptcha;
+	let registerCaptcha;
+	let forgotPasswordCaptchaIsRendred = false;
+	let registerCaptchaIsRendred = false;
+
+	const isConnected = false;
+	let user = JSON.parse('{}');
+	const sessionObj = {
+		sessionActive: false,
+		sessionIsError: false,
+		sessionError: '',
+		mainError: false,
+		sessionMessage: '',
+		sessionType: ''
+	}
+	//-----------------------------------------------------------------------
+	let latexMode = -1;
+	const pageConst = 'page';
+	const pageSizeConst = 'pageSize';
+	let page = localStorage.getItem(pageConst) || '1';
+	let pageSize = localStorage.getItem(pageSizeConst) || '3';
+	const fontSize = 'fontSize';
+	let fontSizeValue = localStorage.getItem(fontSize) || '20';
+	const svgDiv = document.createElement('div');
+	svgDiv.style.position = 'absolute';
+	svgDiv.style.top = '-5000px';
+	const canvas = document.createElement('canvas');
+	const context = canvas.getContext("2d");
+	document.body.appendChild(svgDiv);
+	const imageOutputName = 'imageOutput';
+	let promise = Promise.resolve();  // Used to hold chain of typesetting calls
+	function typeset(code) {
+		promise = promise.then(() => { code(); return MathJax.typesetPromise() }).catch((err) => console.log('Typeset failed: ' + err.message));
+		return promise;
+	}
+	const createImage = (value, callback) => {
+		const svg1 = MathJax.tex2svg('\\displaystyle{\\displaylines{' + value + '}}');
+		svg1.setAttribute('style', 'font-size: '+ fontSizeValue +'px; position: relative');
+		svgDiv.appendChild(svg1);
+		//console.log(MathJax.svgStylesheet());
+		const imageWidth = svg1.clientWidth;
+		const imageHeight = svg1.clientHeight;
+
+		canvas.width = imageWidth;
+		canvas.height = imageHeight;
+
+		context.clearRect(0, 0, imageWidth, imageHeight);
+
+		const svgText = svg1.innerHTML;
+		svgDiv.innerHTML = '';
+		const limit = svgText.lastIndexOf('</svg>');
+		const svg = svgText.substring(0, limit) + '</svg>';
+		const blob = new Blob([svg], { type: 'image/svg+xml' });
+		const objectURL = URL.createObjectURL(blob);
+		const image = new Image();
+		image.src = objectURL;
+		image.addEventListener('load', event => {
+			//context.fillStyle = 'yellow';
+			//context.fillRect(0, 0, imageWidth, imageHeight);
+			context.drawImage(image, 0, 0, imageWidth, imageHeight);
+			const latexImage = new Image();
+			latexImage.src = canvas.toDataURL("image/png");
+			callback(latexImage, [imageWidth, imageHeight]);
+		});
+	}
+	function displayLatex(value, nodeResult) {
+		const imageOutputValue = localStorage.getItem(imageOutputName) || '0';
+		value = value.trim();
+		typeset(() => {
+			if(imageOutputValue === '0'){ // Display LaTeX
+				nodeResult.innerHTML = '$$\\displaystyle{\\displaylines{' + value + '}}$$';
+			}else{ // Display Image
+				createImage(value, latexImage => {
+					nodeResult.innerHTML = '';
+					nodeResult.appendChild(latexImage);
+				});
+			}
+			return nodeResult;
+		});
+	}
+
+</script>
+<script src="./public/scripts/latex_codes.js"></script>
+<script src="./public/scripts/editor.js" defer></script>
+<div class="container">
+	<!-- LATEX COMPONENT -->
+	<div class="contain" style="background: white">
+		<div style="margin-bottom: 5px; text-align: center">
+			<div class="error-message-div" id="global_error" style="display: none; margin: 2px auto">
+				<div class="myFullImg30" style="margin-top: 4px; width:24px; height: 24px; display: inline-block; background-position: bottom 168px right 24px; vertical-align: middle; margin-right: 2px"></div>
+				<span></span>
+				<div style="float: right; padding:0; margin: 0">
+					<button class="modal-btn" style="padding:0" onclick="this.closest('.error-message-div').style.display='none'">&times;</button>
+				</div>
+				<div style="clear:both"></div>
+			</div>
+			<div class="dropdown">
+				<select class="inputext"
+						onchange="applyLatex2(this.options[this.selectedIndex].value, '');this.selectedIndex = 0;">
+					<option style="font-size: 13px; color:gray">Functions</option>
+					<optgroup style="font-size: 13px" label="Logarithms">
+						<option value="\ln">ln</option>
+						<option value="\log">log</option>
+						<option value="\exp">exp</option>
+						<option value="\lg">lg</option>
+					</optgroup>
+					<optgroup style="font-size: 13px" label="Trig">
+						<option value="\sin">sin</option>
+						<option value="\cos">cos</option>
+						<option value="\tan">tan</option>
+						<option value="\csc">csc</option>
+						<option value="\sec">sec</option>
+						<option value="\cot">cot</option>
+						<option value="\sinh">sinh</option>
+						<option value="\cosh">cosh</option>
+						<option value="\tanh">tanh</option>
+						<option value="\coth">coth</option>
+					</optgroup>
+					<optgroup style="font-size: 13px" label="Inverse Trig">
+						<option value="\arcsin">arcsin</option>
+						<option value="\arccos">arccos</option>
+						<option value="\arctan">arctan</option>
+						<option value="\textrm{arccsc}">arccsc</option>
+						<option value="\textrm{arcsec}">arcsec</option>
+						<option value="\textrm{arccot}">arccot</option>
+						<option value="\textrm{argsinh}">argsinh</option>
+						<option value="\textrm{argcosh}">argcosh</option>
+						<option value="\textrm{argtanh}">argtanh</option>
+					</optgroup>
+				</select>
+			</div>
+			<div class="dropdown">
+				<select class="inputext"
+						onchange="applyLatex2(this.options[this.selectedIndex].value, '');this.selectedIndex = 0;">
+					<option style="font-size: 13px; color:gray">Functions 2</option>
+					<option style="font-size: 13px" value="\lim">limit</option>
+					<option style="font-size: 13px" value="\liminf">lim inf</option>
+					<option style="font-size: 13px" value="\limsup">lim sup</option>
+					<option style="font-size: 13px" value="\max">max</option>
+					<option style="font-size: 13px" value="\min">min</option>
+					<option style="font-size: 13px" value="\arg">arg</option>
+					<option style="font-size: 13px" value="\det">det</option>
+					<option style="font-size: 13px" value="\dim">dim</option>
+					<option style="font-size: 13px" value="\gcd">gcd</option>
+					<option style="font-size: 13px" value="\hom">hom</option>
+					<option style="font-size: 13px" value="\ker">ker</option>
+					<option style="font-size: 13px" value="\Pr">Pr</option>
+					<option style="font-size: 13px" value="\inf">inf</option>
+					<option style="font-size: 13px" value="\sup">sup</option>
+				</select>
+			</div>
+			<div class="dropdown">
+				<select class="inputext"
+						onchange="applyLatex2(this.options[this.selectedIndex].value, '');this.selectedIndex = 0;">
+					<option style="font-size: 13px; color:gray">Color</option>
+					<option value="\color{Red} " style="font-size: 13px; color:Red">Red</option>
+					<option value="\color{Green} " style="font-size: 13px; color:Green">Green</option>
+					<option value="\color{Blue} " style="font-size: 13px; color:Blue">Blue</option>
+					<option value="\color{Yellow} " style="font-size: 13px; color:Yellow">Yellow</option>
+					<option value="\color{Cyan} " style="font-size: 13px; color:Cyan">Cyan</option>
+					<option value="\color{Magenta} " style="font-size: 13px; color:Magenta">Magenta</option>
+					<option value="\color{Teal} " style="font-size: 13px; color:Teal">Teal</option>
+					<option value="\color{Purple} " style="font-size: 13px; color:Purple">Purple</option>
+					<option value="\color{DarkBlue} " style="font-size: 13px; color:DarkBlue">DarkBlue</option>
+					<option value="\color{DarkRed} " style="font-size: 13px; color:DarkRed">DarkRed</option>
+					<option value="\color{Orange} " style="font-size: 13px; color:Orange">Orange</option>
+					<option value="\color{DarkOrange} " style="font-size: 13px; color:DarkOrange">DarkOrange
+					</option>
+					<option value="\color{Pink} " style="font-size: 13px; color:Pink">Pink</option>
+					<option value="\color{DarkGreen} " style="font-size: 13px; color:DarkGreen">DarkGreen</option>
+					<option value="\color{Orchid} " style="font-size: 13px; color:Orchid">Orchid</option>
+				</select>
+			</div>
+			<div class="dropdown">
+				<select class="inputext"
+						onchange="applyLatex2(this.options[this.selectedIndex].value, '');this.selectedIndex = 0;">
+					<option style="font-size: 13px; color:gray">Size</option>
+					<option value="\Huge " style="font-size: 13px">Huge</option>
+					<option value="\huge " style="font-size: 13px">huge</option>
+					<option value="\Large " style="font-size: 13px">Large</option>
+					<option value="\large " style="font-size: 13px">large</option>
+					<option value="\normalsize " style="font-size: 13px">normalsize</option>
+					<option value="\small " style="font-size: 13px">small</option>
+					<option value="\tiny " style="font-size: 13px">tiny</option>
+				</select>
+			</div>
+			<div class="dropdown" style="vertical-align: middle">
+				<div class="contour4" style="margin-top:4px">
+					<div data-toggle="modal" data-target="matrices" class="buttoneditor2"
+						 style="height:22px; width:70px">
+						<div class="myFullImg15"
+							 style="height:22px; width:70px; background-position: bottom 22px right 290px;"></div>
+					</div>
+				</div>
+			</div>
+			<div class="dropdown" style="vertical-align: middle">
+				<div class="contour4" style="margin-top:4px">
+					<div data-toggle="modal" data-target="examples" class="buttoneditor2"
+						 style="height:22px; width:70px">
+						<div class="myFullImg15"
+							 style="height:22px; width:70px; background-position: bottom 22px right 360px;"></div>
+					</div>
+				</div>
+			</div>
+		</div>
+		<div>
+			<!-- Row 1 -->
+			<div>
+				<div class="dropdown">
+					<div class="contour2">
+						<div onclick="applyLatex(0)" class="buttoneditor">
+							<div class="myFullImg" style="background-position: bottom 25px right 25px;"></div>
+						</div>
+						<div onclick="applyLatex(2)" class="buttoneditor">
+							<div class="myFullImg" style="background-position: bottom 25px right 50px;"></div>
+						</div>
+						<div onclick="applyLatex(4)" class="buttoneditor">
+							<div class="myFullImg" style="background-position: bottom 25px right 75px;"></div>
+						</div>
+						<div onclick="applyLatex(6)" class="buttoneditor">
+							<div class="myFullImg" style="background-position: bottom 25px right 100px;"></div>
+						</div>
+						<div onclick="applyLatex(8)" class="buttoneditor">
+							<div class="myFullImg" style="background-position: bottom 25px right 125px;"></div>
+						</div>
+						<div onclick="applyLatex(10)" class="buttoneditor">
+							<div class="myFullImg" style="background-position: bottom 25px right 150px;"></div>
+						</div>
+						<div onclick="applyLatex(12)" class="buttoneditor">
+							<div class="myFullImg" style="background-position: bottom 25px right 175px;"></div>
+						</div>
+					</div>
+					<div class="listsctrnt">
+						<div class="contour3">
+							<div onclick="applyLatex(14)" class="buttoneditor">
+								<div class="myFullImg" style="background-position: bottom 50px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(16)" class="buttoneditor">
+								<div class="myFullImg" style="background-position: bottom 50px right 50px;"></div>
+							</div>
+							<div onclick="applyLatex(18)" class="buttoneditor">
+								<div class="myFullImg" style="background-position: bottom 50px right 75px;"></div>
+							</div>
+							<div onclick="applyLatex(20)" class="buttoneditor">
+								<div class="myFullImg" style="background-position: bottom 50px right 100px;"></div>
+							</div>
+							<div onclick="applyLatex(22, false)" class="buttoneditor">
+								<div class="myFullImg" style="background-position: bottom 50px right 125px;"></div>
+							</div>
+							<div onclick="applyLatex(24, false)" class="buttoneditor">
+								<div class="myFullImg" style="background-position: bottom 50px right 150px;"></div>
+							</div>
+							<div onclick="applyLatex(26, false)" class="buttoneditor">
+								<div class="myFullImg" style="background-position: bottom 50px right 175px;"></div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(28, false)" class="buttoneditor">
+								<div class="myFullImg" style="background-position: bottom 75px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(30, false)" class="buttoneditor">
+								<div class="myFullImg" style="background-position: bottom 75px right 50px;"></div>
+							</div>
+							<div onclick="applyLatex(32, false)" class="buttoneditor">
+								<div class="myFullImg" style="background-position: bottom 75px right 75px;"></div>
+							</div>
+							<div onclick="applyLatex(34, false)" class="buttoneditor">
+								<div class="myFullImg" style="background-position: bottom 75px right 100px;"></div>
+							</div>
+							<div onclick="applyLatex(58, false)" class="buttoneditor">
+								<div class="myFullImg" style="background-position: bottom 125px right 50px;"></div>
+							</div>
+							<div onclick="applyLatex(60, false)" class="buttoneditor">
+								<div class="myFullImg" style="background-position: bottom 125px right 75px;"></div>
+							</div>
+							<div onclick="applyLatex(40, false)" class="buttoneditor">
+								<div class="myFullImg" style="background-position: bottom 75px right 175px;"></div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(42, false)" class="buttoneditor">
+								<div class="myFullImg" style="background-position: bottom 100px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(44, false)" class="buttoneditor">
+								<div class="myFullImg" style="background-position: bottom 100px right 50px;"></div>
+							</div>
+							<div onclick="applyLatex(46, false)" class="buttoneditor">
+								<div class="myFullImg" style="background-position: bottom 100px right 75px;"></div>
+							</div>
+							<div onclick="applyLatex(48, false)" class="buttoneditor">
+								<div class="myFullImg" style="background-position: bottom 100px right 100px;"></div>
+							</div>
+							<div onclick="applyLatex(50, false)" class="buttoneditor">
+								<div class="myFullImg" style="background-position: bottom 100px right 125px;"></div>
+							</div>
+							<div onclick="applyLatex(52, false)" class="buttoneditor">
+								<div class="myFullImg" style="background-position: bottom 100px right 150px;"></div>
+							</div>
+							<div onclick="applyLatex(54, false)" class="buttoneditor">
+								<div class="myFullImg" style="background-position: bottom 100px right 175px;"></div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(56, false)" class="buttoneditor">
+								<div class="myFullImg" style="background-position: bottom 125px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(36, false)" class="buttoneditor">
+								<div class="myFullImg" style="background-position: bottom 75px right 125px;"></div>
+							</div>
+							<div onclick="applyLatex(38, false)" class="buttoneditor">
+								<div class="myFullImg" style="background-position: bottom 75px right 150px;"></div>
+							</div>
+							<div onclick="applyLatex(62, false)" class="buttoneditor">
+								<div class="myFullImg" style="background-position: bottom 125px right 100px;"></div>
+							</div>
+							<div onclick="applyLatex(64)" class="buttoneditor">
+								<div class="myFullImg" style="background-position: bottom 125px right 125px;"></div>
+							</div>
+							<div onclick="applyLatex(66, false)" class="buttoneditor">
+								<div class="myFullImg" style="background-position: bottom 125px right 150px;"></div>
+							</div>
+							<div onclick="applyLatex(68, false)" class="buttoneditor">
+								<div class="myFullImg" style="background-position: bottom 125px right 175px;"></div>
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="dropdown">
+					<div class="contour2">
+						<div onclick="applyLatex(70, false)" class="buttoneditor">
+							<div class="myFullImg2" style="background-position: bottom 25px right 25px;"></div>
+						</div>
+						<div onclick="applyLatex(72, false)" class="buttoneditor">
+							<div class="myFullImg2" style="background-position: bottom 25px right 50px;"></div>
+						</div>
+						<div onclick="applyLatex(74, false)" class="buttoneditor">
+							<div class="myFullImg2" style="background-position: bottom 25px right 75px;"></div>
+						</div>
+						<div onclick="applyLatex(76, false)" class="buttoneditor">
+							<div class="myFullImg2" style="background-position: bottom 25px right 100px;"></div>
+						</div>
+					</div>
+					<div class="listsctrnt">
+						<div class="contour3">
+							<div onclick="applyLatex(78, false)" class="buttoneditor">
+								<div class="myFullImg2" style="background-position: bottom 50px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(80, false)" class="buttoneditor">
+								<div class="myFullImg2" style="background-position: bottom 50px right 50px;"></div>
+							</div>
+							<div onclick="applyLatex(82, false)" class="buttoneditor">
+								<div class="myFullImg2" style="background-position: bottom 50px right 75px;"></div>
+							</div>
+							<div onclick="applyLatex(84, false)" class="buttoneditor">
+								<div class="myFullImg2" style="background-position: bottom 50px right 100px;"></div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(86, false)" class="buttoneditor">
+								<div class="myFullImg2" style="background-position: bottom 75px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(88, false)" class="buttoneditor">
+								<div class="myFullImg2" style="background-position: bottom 75px right 50px;"></div>
+							</div>
+							<div onclick="applyLatex(90, false)" class="buttoneditor">
+								<div class="myFullImg2" style="background-position: bottom 75px right 75px;"></div>
+							</div>
+							<div onclick="applyLatex(92, false)" class="buttoneditor">
+								<div class="myFullImg2" style="background-position: bottom 75px right 100px;"></div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(94, false)" class="buttoneditor">
+								<div class="myFullImg2" style="background-position: bottom 100px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(96, false)" class="buttoneditor">
+								<div class="myFullImg2" style="background-position: bottom 100px right 50px;"></div>
+							</div>
+							<div onclick="applyLatex(98, false)" class="buttoneditor">
+								<div class="myFullImg2" style="background-position: bottom 100px right 75px;"></div>
+							</div>
+							<div onclick="applyLatex(100, false)" class="buttoneditor">
+								<div class="myFullImg2" style="background-position: bottom 100px right 100px;">
+								</div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(102, false)" class="buttoneditor">
+								<div class="myFullImg2" style="background-position: bottom 125px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(104, false)" class="buttoneditor">
+								<div class="myFullImg2" style="background-position: bottom 125px right 50px;"></div>
+							</div>
+							<div onclick="applyLatex(106, false)" class="buttoneditor">
+								<div class="myFullImg2" style="background-position: bottom 125px right 75px;"></div>
+							</div>
+							<div onclick="applyLatex(108, false)" class="buttoneditor">
+								<div class="myFullImg2" style="background-position: bottom 125px right 100px;">
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="dropdown">
+					<div class="contour2">
+						<div onclick="applyLatex(110, false)" class="buttoneditor">
+							<div class="myFullImg3" style="background-position: bottom 25px right 25px;"></div>
+						</div>
+						<div onclick="applyLatex(112, false)" class="buttoneditor">
+							<div class="myFullImg3" style="background-position: bottom 25px right 50px;"></div>
+						</div>
+						<div onclick="applyLatex(114, false)" class="buttoneditor">
+							<div class="myFullImg3" style="background-position: bottom 25px right 75px;"></div>
+						</div>
+						<div onclick="applyLatex(116, false)" class="buttoneditor">
+							<div class="myFullImg3" style="background-position: bottom 25px right 100px;"></div>
+						</div>
+						<div onclick="applyLatex(118, false)" class="buttoneditor">
+							<div class="myFullImg7" style="background-position: bottom 25px right 25px;"></div>
+						</div>
+						<div onclick="applyLatex(120, false)" class="buttoneditor">
+							<div class="myFullImg3" style="background-position: bottom 25px right 150px;"></div>
+						</div>
+					</div>
+					<div class="listsctrnt">
+						<div class="contour3">
+							<div onclick="applyLatex(122, false)" class="buttoneditor">
+								<div class="myFullImg3" style="background-position: bottom 25px right 125px;"></div>
+							</div>
+							<div onclick="applyLatex(124, false)" class="buttoneditor">
+								<div class="myFullImg3" style="background-position: bottom 50px right 50px;"></div>
+							</div>
+							<div onclick="applyLatex(126, false)" class="buttoneditor">
+								<div class="myFullImg3" style="background-position: bottom 50px right 75px;"></div>
+							</div>
+							<div onclick="applyLatex(128, false)" class="buttoneditor">
+								<div class="myFullImg3" style="background-position: bottom 50px right 100px;"></div>
+							</div>
+							<div onclick="applyLatex(130, false)" class="buttoneditor">
+								<div class="myFullImg3" style="background-position: bottom 50px right 125px;"></div>
+							</div>
+							<div onclick="applyLatex(132, false)" class="buttoneditor">
+								<div class="myFullImg3" style="background-position: bottom 50px right 150px;"></div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(134, false)" class="buttoneditor">
+								<div class="myFullImg3" style="background-position: bottom 75px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(136, false)" class="buttoneditor">
+								<div class="myFullImg3" style="background-position: bottom 75px right 50px;"></div>
+							</div>
+							<div onclick="applyLatex(138, false)" class="buttoneditor">
+								<div class="myFullImg3" style="background-position: bottom 75px right 75px;"></div>
+							</div>
+							<div onclick="applyLatex(140, false)" class="buttoneditor">
+								<div class="myFullImg3" style="background-position: bottom 75px right 100px;"></div>
+							</div>
+							<div onclick="applyLatex(142, false)" class="buttoneditor">
+								<div class="myFullImg3" style="background-position: bottom 75px right 125px;"></div>
+							</div>
+							<div onclick="applyLatex(144, false)" class="buttoneditor">
+								<div class="myFullImg3" style="background-position: bottom 75px right 150px;"></div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(146, false)" class="buttoneditor">
+								<div class="myFullImg3" style="background-position: bottom 100px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(148, false)" class="buttoneditor">
+								<div class="myFullImg3" style="background-position: bottom 100px right 50px;"></div>
+							</div>
+							<div onclick="applyLatex(150, false)" class="buttoneditor">
+								<div class="myFullImg3" style="background-position: bottom 100px right 75px;"></div>
+							</div>
+							<div onclick="applyLatex(152, false)" class="buttoneditor">
+								<div class="myFullImg3" style="background-position: bottom 100px right 100px;">
+								</div>
+							</div>
+							<div onclick="applyLatex(154, false)" class="buttoneditor">
+								<div class="myFullImg3" style="background-position: bottom 100px right 125px;">
+								</div>
+							</div>
+							<div onclick="applyLatex(156, false)" class="buttoneditor">
+								<div class="myFullImg3" style="background-position: bottom 100px right 150px;">
+								</div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(158, false)" class="buttoneditor">
+								<div class="myFullImg3" style="background-position: bottom 125px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(160, false)" class="buttoneditor">
+								<div class="myFullImg3" style="background-position: bottom 125px right 50px;"></div>
+							</div>
+							<div onclick="applyLatex(162, false)" class="buttoneditor">
+								<div class="myFullImg3" style="background-position: bottom 125px right 75px;"></div>
+							</div>
+							<div onclick="applyLatex(164, false)" class="buttoneditor">
+								<div class="myFullImg3" style="background-position: bottom 125px right 100px;">
+								</div>
+							</div>
+							<div onclick="applyLatex(166, false)" class="buttoneditor">
+								<div class="myFullImg3" style="background-position: bottom 125px right 125px;">
+								</div>
+							</div>
+							<div onclick="applyLatex(168, false)" class="buttoneditor">
+								<div class="myFullImg3" style="background-position: bottom 125px right 150px;">
+								</div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(170, false)" class="buttoneditor">
+								<div class="myFullImg3" style="background-position: bottom 50px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(172, false)" class="buttoneditor">
+								<div class="myFullImg7" style="background-position: bottom 25px right 50px;"></div>
+							</div>
+							<div onclick="applyLatex(174, false)" class="buttoneditor">
+								<div class="myFullImg7" style="background-position: bottom 25px right 75px;"></div>
+							</div>
+							<div onclick="applyLatex(176, false)" class="buttoneditor">
+								<div class="myFullImg7" style="background-position: bottom 25px right 100px;"></div>
+							</div>
+							<div onclick="applyLatex(178, false)" class="buttoneditor">
+								<div class="myFullImg7" style="background-position: bottom 25px right 125px;"></div>
+							</div>
+							<div onclick="applyLatex(180, false)" class="buttoneditor">
+								<div class="myFullImg7" style="background-position: bottom 25px right 150px;"></div>
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="dropdown">
+					<div class="contour2">
+						<div onclick="applyLatex(182, false)" class="buttoneditor">
+							<div class="myFullImg4" style="background-position: bottom 25px right 25px;"></div>
+						</div>
+						<div onclick="applyLatex(184, false)" class="buttoneditor">
+							<div class="myFullImg4" style="background-position: bottom 25px right 50px;"></div>
+						</div>
+						<div onclick="applyLatex(186, false)" class="buttoneditor">
+							<div class="myFullImg4" style="background-position: bottom 25px right 75px;"></div>
+						</div>
+						<div onclick="applyLatex(188, false)" class="buttoneditor">
+							<div class="myFullImg4" style="background-position: bottom 25px right 100px;"></div>
+						</div>
+						<div onclick="applyLatex(190, false)" class="buttoneditor">
+							<div class="myFullImg4" style="background-position: bottom 25px right 125px;"></div>
+						</div>
+					</div>
+					<div class="listsctrnt">
+						<div class="contour3">
+							<div onclick="applyLatex(192, false)" class="buttoneditor">
+								<div class="myFullImg4" style="background-position: bottom 50px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(194, false)" class="buttoneditor">
+								<div class="myFullImg4" style="background-position: bottom 50px right 50px;"></div>
+							</div>
+							<div onclick="applyLatex(196, false)" class="buttoneditor">
+								<div class="myFullImg4" style="background-position: bottom 50px right 75px;"></div>
+							</div>
+							<div onclick="applyLatex(198, false)" class="buttoneditor">
+								<div class="myFullImg4" style="background-position: bottom 50px right 100px;"></div>
+							</div>
+							<div onclick="applyLatex(200, false)" class="buttoneditor">
+								<div class="myFullImg4" style="background-position: bottom 50px right 125px;"></div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(202, false)" class="buttoneditor">
+								<div class="myFullImg4" style="background-position: bottom 75px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(204, false)" class="buttoneditor">
+								<div class="myFullImg4" style="background-position: bottom 75px right 50px;"></div>
+							</div>
+							<div onclick="applyLatex(206, false)" class="buttoneditor">
+								<div class="myFullImg4" style="background-position: bottom 75px right 75px;"></div>
+							</div>
+							<div onclick="applyLatex(208, false)" class="buttoneditor">
+								<div class="myFullImg4" style="background-position: bottom 75px right 100px;"></div>
+							</div>
+							<div onclick="applyLatex(210, false)" class="buttoneditor">
+								<div class="myFullImg4" style="background-position: bottom 75px right 125px;"></div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(212, false)" class="buttoneditor">
+								<div class="myFullImg4" style="background-position: bottom 100px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(214, false)" class="buttoneditor">
+								<div class="myFullImg4" style="background-position: bottom 100px right 50px;"></div>
+							</div>
+							<div onclick="applyLatex(216, false)" class="buttoneditor">
+								<div class="myFullImg4" style="background-position: bottom 100px right 75px;"></div>
+							</div>
+							<div onclick="applyLatex(218, false)" class="buttoneditor">
+								<div class="myFullImg4" style="background-position: bottom 100px right 100px;">
+								</div>
+							</div>
+							<div onclick="applyLatex(220, false)" class="buttoneditor">
+								<div class="myFullImg4" style="background-position: bottom 100px right 125px;">
+								</div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(222, false)" class="buttoneditor">
+								<div class="myFullImg4" style="background-position: bottom 125px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(224, false)" class="buttoneditor">
+								<div class="myFullImg4" style="background-position: bottom 125px right 50px;"></div>
+							</div>
+							<div onclick="applyLatex(226, false)" class="buttoneditor">
+								<div class="myFullImg4" style="background-position: bottom 125px right 75px;"></div>
+							</div>
+							<div onclick="applyLatex(228, false)" class="buttoneditor">
+								<div class="myFullImg4" style="background-position: bottom 125px right 100px;">
+								</div>
+							</div>
+							<div onclick="applyLatex(230, false)" class="buttoneditor">
+								<div class="myFullImg4" style="background-position: bottom 125px right 125px;">
+								</div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(232, false)" class="buttoneditor">
+								<div class="myFullImg4" style="background-position: bottom 150px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(234, false)" class="buttoneditor">
+								<div class="myFullImg4" style="background-position: bottom 150px right 50px;"></div>
+							</div>
+							<div onclick="applyLatex(236, false)" class="buttoneditor">
+								<div class="myFullImg4" style="background-position: bottom 150px right 75px;"></div>
+							</div>
+							<div onclick="applyLatex(238, false)" class="buttoneditor">
+								<div class="myFullImg4" style="background-position: bottom 150px right 100px;">
+								</div>
+							</div>
+							<div onclick="applyLatex(240, false)" class="buttoneditor">
+								<div class="myFullImg4" style="background-position: bottom 150px right 125px;">
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="dropdown">
+					<div class="contour2">
+						<div onclick="applyLatex(404)" class="buttoneditor">
+							<div class="myFullImg12" style="background-position: bottom 25px right 25px;"></div>
+						</div>
+						<div onclick="applyLatex(406)" class="buttoneditor">
+							<div class="myFullImg12" style="background-position: bottom 25px right 50px;"></div>
+						</div>
+					</div>
+					<div class="listsctrnt">
+						<div class="contour3">
+							<div onclick="applyLatex(408)" class="buttoneditor">
+								<div class="myFullImg12" style="background-position: bottom 50px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(410)" class="buttoneditor">
+								<div class="myFullImg12" style="background-position: bottom 50px right 50px;"></div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(412)" class="buttoneditor">
+								<div class="myFullImg12" style="background-position: bottom 75px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(414)" class="buttoneditor">
+								<div class="myFullImg12" style="background-position: bottom 75px right 50px;"></div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+			<!-- Row 2 -->
+			<div>
+				<div class="dropdown">
+					<div class="contour2">
+						<div onclick="applyLatex(242, false)" class="buttoneditor">
+							<div class="myFullImg5" style="background-position: bottom 25px right 25px;"></div>
+						</div>
+						<div onclick="applyLatex(244, false)" class="buttoneditor">
+							<div class="myFullImg5" style="background-position: bottom 25px right 50px;"></div>
+						</div>
+						<div onclick="applyLatex(246, false)" class="buttoneditor">
+							<div class="myFullImg5" style="background-position: bottom 25px right 75px;"></div>
+						</div>
+					</div>
+					<div class="listsctrnt">
+						<div class="contour3">
+							<div onclick="applyLatex(248, false)" class="buttoneditor">
+								<div class="myFullImg5" style="background-position: bottom 50px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(250, false)" class="buttoneditor">
+								<div class="myFullImg5" style="background-position: bottom 50px right 50px;"></div>
+							</div>
+							<div onclick="applyLatex(252, false)" class="buttoneditor">
+								<div class="myFullImg5" style="background-position: bottom 50px right 75px;"></div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(254, false)" class="buttoneditor">
+								<div class="myFullImg5" style="background-position: bottom 75px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(256, false)" class="buttoneditor">
+								<div class="myFullImg5" style="background-position: bottom 75px right 50px;"></div>
+							</div>
+							<div onclick="applyLatex(258, false)" class="buttoneditor">
+								<div class="myFullImg5" style="background-position: bottom 75px right 75px;"></div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(260, false)" class="buttoneditor">
+								<div class="myFullImg5" style="background-position: bottom 100px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(262, false)" class="buttoneditor">
+								<div class="myFullImg5" style="background-position: bottom 100px right 50px;"></div>
+							</div>
+							<div class="">
+
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="dropdown">
+					<div class="contour2">
+						<div onclick="applyLatex(264)" class="buttoneditor">
+							<div class="myFullImg6" style="background-position: bottom 25px right 25px;"></div>
+						</div>
+						<div onclick="applyLatex(266)" class="buttoneditor">
+							<div class="myFullImg6" style="background-position: bottom 25px right 50px;"></div>
+						</div>
+					</div>
+					<div class="listsctrnt">
+						<div class="contour3">
+							<div onclick="applyLatex(268)" class="buttoneditor">
+								<div class="myFullImg6" style="background-position: bottom 50px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(270)" class="buttoneditor">
+								<div class="myFullImg6" style="background-position: bottom 50px right 50px;"></div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(272)" class="buttoneditor">
+								<div class="myFullImg6" style="background-position: bottom 75px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(274)" class="buttoneditor">
+								<div class="myFullImg6" style="background-position: bottom 75px right 50px;"></div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(276)" class="buttoneditor">
+								<div class="myFullImg6" style="background-position: bottom 100px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(278)" class="buttoneditor">
+								<div class="myFullImg6" style="background-position: bottom 100px right 50px;"></div>
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="dropdown">
+					<div class="contour2">
+						<div onclick="applyLatex(280, false)" class="buttoneditor">
+							<div class="myFullImg8" style="background-position: bottom 25px right 25px;"></div>
+						</div>
+						<div onclick="applyLatex(282, false)" class="buttoneditor">
+							<div class="myFullImg8" style="background-position: bottom 25px right 50px;"></div>
+						</div>
+						<div onclick="applyLatex(284, false)" class="buttoneditor">
+							<div class="myFullImg8" style="background-position: bottom 25px right 75px;"></div>
+						</div>
+					</div>
+					<div class="listsctrnt">
+						<div class="contour3">
+							<div onclick="applyLatex(286, false)" class="buttoneditor">
+								<div class="myFullImg8" style="background-position: bottom 50px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(288, false)" class="buttoneditor">
+								<div class="myFullImg8" style="background-position: bottom 50px right 50px;"></div>
+							</div>
+							<div onclick="applyLatex(290, false)" class="buttoneditor">
+								<div class="myFullImg8" style="background-position: bottom 50px right 75px;"></div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(292, false)" class="buttoneditor">
+								<div class="myFullImg8" style="background-position: bottom 75px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(294, false)" class="buttoneditor">
+								<div class="myFullImg8" style="background-position: bottom 75px right 50px;"></div>
+							</div>
+							<div onclick="applyLatex(296, false)" class="buttoneditor">
+								<div class="myFullImg8" style="background-position: bottom 75px right 75px;"></div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(298, false)" class="buttoneditor">
+								<div class="myFullImg8" style="background-position: bottom 100px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(300, false)" class="buttoneditor">
+								<div class="myFullImg8" style="background-position: bottom 100px right 50px;"></div>
+							</div>
+							<div onclick="applyLatex(302, false)" class="buttoneditor">
+								<div class="myFullImg8" style="background-position: bottom 100px right 75px;"></div>
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="dropdown">
+					<div class="contour2">
+						<div onclick="applyLatex(304, false)" class="buttoneditor">
+							<div class="myFullImg9" style="background-position: bottom 25px right 25px;"></div>
+						</div>
+						<div onclick="applyLatex(306, false)" class="buttoneditor">
+							<div class="myFullImg9" style="background-position: bottom 25px right 50px;"></div>
+						</div>
+						<div onclick="applyLatex(308, false)" class="buttoneditor">
+							<div class="myFullImg9" style="background-position: bottom 25px right 75px;"></div>
+						</div>
+						<div onclick="applyLatex(310, false)" class="buttoneditor">
+							<div class="myFullImg9" style="background-position: bottom 25px right 100px;"></div>
+						</div>
+						<div onclick="applyLatex(312, false)" class="buttoneditor">
+							<div class="myFullImg9" style="background-position: bottom 25px right 125px;"></div>
+						</div>
+					</div>
+					<div class="listsctrnt">
+						<div class="contour3">
+							<div onclick="applyLatex(314, false)" class="buttoneditor">
+								<div class="myFullImg9" style="background-position: bottom 50px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(316, false)" class="buttoneditor">
+								<div class="myFullImg9" style="background-position: bottom 50px right 50px;"></div>
+							</div>
+							<div onclick="applyLatex(318, false)" class="buttoneditor">
+								<div class="myFullImg9" style="background-position: bottom 50px right 75px;"></div>
+							</div>
+							<div onclick="applyLatex(320, false)" class="buttoneditor">
+								<div class="myFullImg9" style="background-position: bottom 50px right 100px;"></div>
+							</div>
+							<div onclick="applyLatex(322, false)" class="buttoneditor">
+								<div class="myFullImg9" style="background-position: bottom 50px right 125px;"></div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(324, false)" class="buttoneditor">
+								<div class="myFullImg9" style="background-position: bottom 75px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(326, false)" class="buttoneditor">
+								<div class="myFullImg9" style="background-position: bottom 75px right 50px;"></div>
+							</div>
+							<div onclick="applyLatex(328, false)" class="buttoneditor">
+								<div class="myFullImg9" style="background-position: bottom 75px right 75px;"></div>
+							</div>
+							<div onclick="applyLatex(330, false)" class="buttoneditor">
+								<div class="myFullImg9" style="background-position: bottom 75px right 100px;"></div>
+							</div>
+							<div onclick="applyLatex(332, false)" class="buttoneditor">
+								<div class="myFullImg9" style="background-position: bottom 75px right 125px;"></div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(334, false)" class="buttoneditor">
+								<div class="myFullImg9" style="background-position: bottom 100px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(336, false)" class="buttoneditor">
+								<div class="myFullImg9" style="background-position: bottom 100px right 50px;"></div>
+							</div>
+							<div onclick="applyLatex(338, false)" class="buttoneditor">
+								<div class="myFullImg9" style="background-position: bottom 100px right 75px;"></div>
+							</div>
+							<div onclick="applyLatex(340, false)" class="buttoneditor">
+								<div class="myFullImg9" style="background-position: bottom 100px right 100px;">
+								</div>
+							</div>
+							<div onclick="applyLatex(342, false)" class="buttoneditor">
+								<div class="myFullImg9" style="background-position: bottom 100px right 125px;">
+								</div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(344, false)" class="buttoneditor">
+								<div class="myFullImg9" style="background-position: bottom 125px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(346, false)" class="buttoneditor">
+								<div class="myFullImg9" style="background-position: bottom 125px right 50px;"></div>
+							</div>
+							<div onclick="applyLatex(348, false)" class="buttoneditor">
+								<div class="myFullImg9" style="background-position: bottom 125px right 75px;"></div>
+							</div>
+							<div onclick="applyLatex(350, false)" class="buttoneditor">
+								<div class="myFullImg9" style="background-position: bottom 125px right 100px;">
+								</div>
+							</div>
+							<div onclick="applyLatex(352, false)" class="buttoneditor">
+								<div class="myFullImg9" style="background-position: bottom 125px right 125px;">
+								</div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(354, false)" class="buttoneditor">
+								<div class="myFullImg9" style="background-position: bottom 150px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(356, false)" class="buttoneditor">
+								<div class="myFullImg9" style="background-position: bottom 150px right 50px;"></div>
+							</div>
+							<div onclick="applyLatex(358, false)" class="buttoneditor">
+								<div class="myFullImg9" style="background-position: bottom 150px right 75px;"></div>
+							</div>
+							<div onclick="applyLatex(360, false)" class="buttoneditor">
+								<div class="myFullImg9" style="background-position: bottom 150px right 100px;">
+								</div>
+							</div>
+							<div onclick="applyLatex(362, false)" class="buttoneditor">
+								<div class="myFullImg9" style="background-position: bottom 150px right 125px;">
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="dropdown">
+					<div class="contour2">
+						<div onclick="applyLatex(364, false)" class="buttoneditor">
+							<div class="myFullImg10" style="background-position: bottom 25px right 25px;"></div>
+						</div>
+						<div onclick="applyLatex(366, false)" class="buttoneditor">
+							<div class="myFullImg10" style="background-position: bottom 25px right 50px;"></div>
+						</div>
+						<div onclick="applyLatex(368, false)" class="buttoneditor">
+							<div class="myFullImg10" style="background-position: bottom 25px right 75px;"></div>
+						</div>
+					</div>
+					<div class="listsctrnt">
+						<div class="contour3">
+							<div onclick="applyLatex(370, false)" class="buttoneditor">
+								<div class="myFullImg10" style="background-position: bottom 50px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(372, false)" class="buttoneditor">
+								<div class="myFullImg10" style="background-position: bottom 50px right 50px;"></div>
+							</div>
+							<div onclick="applyLatex(374, false)" class="buttoneditor">
+								<div class="myFullImg10" style="background-position: bottom 50px right 75px;"></div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(376, false)" class="buttoneditor">
+								<div class="myFullImg10" style="background-position: bottom 75px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(378, false)" class="buttoneditor">
+								<div class="myFullImg10" style="background-position: bottom 75px right 50px;"></div>
+							</div>
+							<div onclick="applyLatex(380, false)" class="buttoneditor">
+								<div class="myFullImg10" style="background-position: bottom 75px right 75px;"></div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(382, false)" class="buttoneditor">
+								<div class="myFullImg10" style="background-position: bottom 100px right 25px;">
+								</div>
+							</div>
+							<div onclick="applyLatex(384, false)" class="buttoneditor">
+								<div class="myFullImg10" style="background-position: bottom 100px right 50px;">
+								</div>
+							</div>
+							<div onclick="applyLatex(386, false)" class="buttoneditor">
+								<div class="myFullImg10" style="background-position: bottom 100px right 75px;">
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="dropdown">
+					<div class="contour2">
+						<div onclick="applyLatex(388)" class="buttoneditor">
+							<div class="myFullImg11" style="background-position: bottom 25px right 25px;"></div>
+						</div>
+						<div onclick="applyLatex(390)" class="buttoneditor">
+							<div class="myFullImg11" style="background-position: bottom 25px right 50px;"></div>
+						</div>
+					</div>
+					<div class="listsctrnt">
+						<div class="contour3">
+							<div onclick="applyLatex(392)" class="buttoneditor">
+								<div class="myFullImg11" style="background-position: bottom 50px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(394)" class="buttoneditor">
+								<div class="myFullImg11" style="background-position: bottom 50px right 50px;"></div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(396)" class="buttoneditor">
+								<div class="myFullImg11" style="background-position: bottom 75px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(398)" class="buttoneditor">
+								<div class="myFullImg11" style="background-position: bottom 75px right 50px;"></div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(400)" class="buttoneditor">
+								<div class="myFullImg11" style="background-position: bottom 100px right 25px;">
+								</div>
+							</div>
+							<div onclick="applyLatex(402)" class="buttoneditor">
+								<div class="myFullImg11" style="background-position: bottom 100px right 50px;">
+								</div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(452)" class="buttoneditor">
+								<div class="myFullImg11" style="background-position: bottom 125px right 25px;">
+								</div>
+							</div>
+							<div onclick="applyLatex(454)" class="buttoneditor">
+								<div class="myFullImg11" style="background-position: bottom 125px right 50px;">
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="dropdown">
+					<div class="contour2">
+						<div onclick="applyLatex(416)" class="buttoneditor" style="width: 80px; height:25px">
+							<div class="myFullImg13" style="background-position: bottom 25px right 80px;"></div>
+						</div>
+					</div>
+					<div class="listsctrnt">
+						<div class="contour3">
+							<div onclick="applyLatex(418)" class="buttoneditor" style="width: 80px; height:25px">
+								<div class="myFullImg13" style="background-position: bottom 50px right 80px;"></div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(420)" class="buttoneditor" style="width: 80px; height:25px">
+								<div class="myFullImg13" style="background-position: bottom 75px right 80px;"></div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(422)" class="buttoneditor" style="width: 80px; height:25px">
+								<div class="myFullImg13" style="background-position: bottom 100px right 80px;">
+								</div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(424)" class="buttoneditor" style="width: 80px; height:25px">
+								<div class="myFullImg13" style="background-position: bottom 125px right 80px;">
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="dropdown">
+					<div class="contour2">
+						<div onclick="applyLatex(426)" class="buttoneditor">
+							<div class="myFullImg14" style="background-position: bottom 25px right 25px;"></div>
+						</div>
+						<div onclick="applyLatex(428)" class="buttoneditor">
+							<div class="myFullImg14" style="background-position: bottom 25px right 50px;"></div>
+						</div>
+					</div>
+					<div class="listsctrnt">
+						<div class="contour3">
+							<div onclick="applyLatex(430)" class="buttoneditor">
+								<div class="myFullImg14" style="background-position: bottom 50px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(432)" class="buttoneditor">
+								<div class="myFullImg14" style="background-position: bottom 50px right 50px;"></div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(434)" class="buttoneditor">
+								<div class="myFullImg14" style="background-position: bottom 75px right 25px;"></div>
+							</div>
+							<div onclick="applyLatex(436)" class="buttoneditor">
+								<div class="myFullImg14" style="background-position: bottom 75px right 50px;"></div>
+							</div>
+						</div>
+						<div class="contour3">
+							<div onclick="applyLatex(438)" class="buttoneditor">
+								<div class="myFullImg14" style="background-position: bottom 100px right 25px;">
+								</div>
+							</div>
+							<div onclick="applyLatex(440)" class="buttoneditor">
+								<div class="myFullImg14" style="background-position: bottom 100px right 50px;">
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+			<!-- Row 3 -->
+			<div style="margin-top: 5px">
+				<div class="contour5">
+					<div onclick="applyLatex(442)" class="buttoneditor" style="height:22px; width:90px">
+						<div class="myFullImg15"
+							 style="height:22px; width:90px; background-position: bottom 22px right 90px;"></div>
+					</div>
+				</div>
+				<div class="contour5">
+					<div onclick="applyLatex(444)" class="buttoneditor" style="height:22px; width:65px">
+						<div class="myFullImg15"
+							 style="height:22px; width:65px; background-position: bottom 22px right 155px;"></div>
+					</div>
+				</div>
+				<div class="contour5">
+					<div onclick="applyLatex(446)" class="buttoneditor" style="height:22px; width:65px">
+						<div class="myFullImg15"
+							 style="height:22px; width:65px; background-position: bottom 22px right 220px;"></div>
+					</div>
+				</div>
+				<div class="contour5">
+					<div onclick="applyLatex(448)" class="buttoneditor"
+						 style="height:22px; width:22px; margin-right: 4px">
+						<div class="myFullImg15"
+							 style="height:22px; width:22px; background-position: bottom 22px right 382px;"></div>
+					</div>
+					<div onclick="applyLatex(450)" class="buttoneditor" style="height:22px; width:22px">
+						<div class="myFullImg15"
+							 style="height:22px; width:22px; background-position: bottom 22px right 404px;"></div>
+					</div>
+				</div>
+				<div class="contour6" style="vertical-align: middle">
+					<div class="buttoneditor9">
+						<label><input disabled="true" type="checkbox" onchange="changeImageOutput(this);" id="image_output" />Image output</label>
+					</div>
+					<div class="buttoneditor9">
+						<label>
+							Font size <input disabled="true" type="number" step="1" oninput="changeFontSize(this);" min="10" max="100" id="font_size" />
+						</label>
+					</div>
+					<div class="contour6">
+						<div class="contour4">
+							<div data-toggle="modal" data-target="latex" class="buttoneditor2" style="height:22px; width:50px">
+								<div class="myFullImg22" style="height:22px; width:50px"></div>
+							</div>
+						</div>
+					</div>
+					<div class="contour6">
+						<div class="contour4">
+							<div data-toggle="modal" data-target="colors" class="buttoneditor2" style="height:22px; width:50px">
+								<div class="myFullImg25" style="height:22px; width:50px; background-position: bottom 64px right 50px"></div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+		<div class="latex-editor-area">
+			<div>
+				<div style="float: left; margin-right: 10px">
+					<button id="rlb" class="rlb">Remove Line breaks</button>
+					<button class="myFullImg24 previous-button button-disabled-previous" id="previous"></button>
+					<button class="myFullImg24 next-button button-disabled-next" id="next"></button>
+				</div>
+				<div style="float: left; margin-top: 12px">
+					<div class="contour6">
+						<div class="contour4">
+							<div data-toggle="modal" data-target="backgrounds" class="buttoneditor2" style="height:21px; width:100px">
+								<div class="myFullImg25" style="height:21px; width:100px; background-position: bottom 21px right 100px"></div>
+							</div>
+						</div>
+					</div>
+				</div>
+				<div style="float: left; margin-top: 12px">
+					<div class="contour6">
+						<div class="contour4">
+							<div data-toggle="modal" data-target="chimestry" class="buttoneditor2" style="height:21px; width:82px">
+								<div class="myFullImg25" style="height:21px; width:82px; background-position: bottom 85px right 82px"></div>
+							</div>
+						</div>
+					</div>
+				</div>
+				<div style="float: left; margin-top: 12px">
+					<div class="contour6">
+						<div class="contour4">
+							<div data-toggle="modal" data-target="physics" class="buttoneditor2" style="height:21px; width:58px">
+								<div class="myFullImg25" style="height:21px; width:58px; background-position: bottom 42px right 58px"></div>
+							</div>
+						</div>
+					</div>
+				</div>
+				<div style="float: left; margin-top: 12px">
+
+				</div>
+				<div style="float: right">
+					<button id="download_pdf" class="rlb" disabled="true">
+						<div class="myFullImg31" style="width:20px; height: 20px; display: inline-block; background-position: bottom 36px right 20px; vertical-align: middle;"></div>
+						Download PDF
+					</button>
+					<button id="download_image" class="rlb">
+						<div class="myFullImg31" style="width:20px; height: 20px; display: inline-block; background-position: bottom 36px right 20px; vertical-align: middle;"></div>
+						Download Image
+					</button>
+					<button onclick="swithLaTeXMode(-1)" class="rlb">
+						<div class="myFullImg31" style="width:16px; height: 16px; display: inline-block; background-position: bottom 16px right 16px; vertical-align: middle;"></div>
+						Add Code
+					</button>
+				</div>
+			</div>
+			<div style="clear:both"></div>
+			<div id="message-box">
+				<textarea class="latex" style="min-width:450px; width: 100%; height:150px" id="latex_editor" dir="ltr" spellcheck="false"></textarea>
+			</div>
+		</div>
+		<div class="tex" id="resultat"></div>
+	</div>
+	<!-- SIDEBAR COMPONENT -->
+	<div class="sidebar">
+		<div class="sidebar2" style="background: white" id="sidebar_component">
+
+			<div style="padding: 4px 0px" id="login_register_section">
+			</div>
+			<div style="padding: 4px 0px" id="profile_section">
+				<div class="profile-right accordion-header" data-target-dropdown="dropdown-profile">
+					<div>
+						<img src="" style="width: 38px; height: 38px; border-radius: 50%; vertical-align: middle" />
+						<span></span>
+					</div>
+					<div style="font-size: 13px">&#9660;</div>
+				</div>
+			</div>
+
+
+			<template id="latex_code_template">
+				<div style="margin: 10px 0px">
+					<div class="latex-box-right">
+						<div class="title"></div>
+						<div class="date2"><img src="./public/images/time.png" style="vertical-align: middle" alt="time" /> : <span class="date"></span></div>
+						<div class="tools">
+							<div style="float:left; width: 50%" >
+								<button class="edit" data-toggle="modal" data-target="add_latex_code_modal">
+									<div class="myFullImg31" style="width:26px; height: 26px; display: inline-block; background-position: bottom 62px right 26px; vertical-align: middle;"></div>
+								</button>
+							</div>
+							<div style="float:right; width: 50%">
+								<button class="delete">
+									<div class="myFullImg31" style="width:21px; height: 21px; display: inline-block; background-position: bottom 83px right 21px; vertical-align: middle;"></div>
+								</button>
+							</div>
+							<div style="clear:both"></div>
+						</div>
+					</div>
+				</div>
+			</template>
+			<div id="latex_codes_section">
+				<div class="latex-code-title">
+					Your codes (<span>0</span>)
+				</div>
+				<div style="margin: 10px 0px"><div class="sidebar-loading"></div></div>
+				<div class="latex-code-latex"></div>
+			</div>
+		</div>
+	</div>
+</div>
+
+<!-- MODALS -->
+<!-- COLORS MODAL -->
+<div class="modal" style="width: 600px" id="colors" can-be-closed="true">
+	<div style="display: none">
+		<div class="header">
+			<div class="title">Base colors</div>
+			<button class="modal-btn" data-dismiss="modal">&times;</button>
+		</div>
+		<div class="body">
+			<div style="text-align:center">
+				<div class="color-box-title">
+					<h2>Base colors</h2>
+				</div>
+				<table class="color-box-table">
+					<tr>
+						<th>color</th>
+						<th>name</th>
+						<th>HEX</th>
+						<th>RGB</th>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #000000"></div>
+						</td>
+						<td>black</td>
+						<td>#000000</td>
+						<td>rgb(0, 0, 0)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #0000FF"></div>
+						</td>
+						<td>blue</td>
+						<td>#0000FF</td>
+						<td>rgb(0, 0, 255)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #A52A2A"></div>
+						</td>
+						<td>brown</td>
+						<td>#A52A2A</td>
+						<td>rgb(165, 42, 42)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #00FFFF"></div>
+						</td>
+						<td>cyan</td>
+						<td>#00FFFF</td>
+						<td>rgb(0, 255, 255)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #A9A9A9"></div>
+						</td>
+						<td>darkgray</td>
+						<td>#A9A9A9</td>
+						<td>rgb(169, 169, 169)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #808080"></div>
+						</td>
+						<td>gray</td>
+						<td>#808080</td>
+						<td>rgb(128, 128, 128)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #008000"></div>
+						</td>
+						<td>green</td>
+						<td>#008000</td>
+						<td>rgb(0, 128, 0)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #D3D3D3"></div>
+						</td>
+						<td>lightgray</td>
+						<td>#D3D3D3</td>
+						<td>rgb(211, 211, 211)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #00FF00"></div>
+						</td>
+						<td>lime</td>
+						<td>#00FF00</td>
+						<td>rgb(0, 255, 0)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #FF00FF"></div>
+						</td>
+						<td>magenta</td>
+						<td>#FF00FF</td>
+						<td>rgb(255, 0, 255)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #808000"></div>
+						</td>
+						<td>olive</td>
+						<td>#808000</td>
+						<td>rgb(128, 128, 0)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #FFA500"></div>
+						</td>
+						<td>orange</td>
+						<td>#FFA500</td>
+						<td>rgb(255, 165, 0)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #FFC0CB"></div>
+						</td>
+						<td>pink</td>
+						<td>#FFC0CB</td>
+						<td>rgb(255, 192, 203)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #800080"></div>
+						</td>
+						<td>purple</td>
+						<td>#800080</td>
+						<td>rgb(128, 0, 128)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #FF0000"></div>
+						</td>
+						<td>red</td>
+						<td>#FF0000</td>
+						<td>rgb(255, 0, 0)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #008080"></div>
+						</td>
+						<td>teal</td>
+						<td>#008080</td>
+						<td>rgb(0, 128, 128)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #EE82EE"></div>
+						</td>
+						<td>violet</td>
+						<td>#EE82EE</td>
+						<td>rgb(238, 130, 238)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #FFFFFF"></div>
+						</td>
+						<td>white</td>
+						<td>#FFFFFF</td>
+						<td>rgb(255, 255, 255)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #FFFF00"></div>
+						</td>
+						<td>yellow</td>
+						<td>#FFFF00</td>
+						<td>rgb(255, 255, 0)</td>
+					</tr>
+				</table>
+				<hr />
+				<div class="color-box-title">
+					<h2>Colors via dvipsnames option</h2>
+				</div>
+				<table class="color-box-table">
+					<tr class="color-box-table-title">
+						<th>color</th>
+						<th>name</th>
+						<th>HEX</th>
+						<th>RGB</th>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #FBB982"></div>
+						</td>
+						<td>Apricot</td>
+						<td>#FBB982</td>
+						<td>rgb(251, 185, 130)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #00B5BE"></div>
+						</td>
+						<td>Aquamarine</td>
+						<td>#00B5BE</td>
+						<td>rgb(0, 181, 190)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #C04F17"></div>
+						</td>
+						<td>Bittersweet</td>
+						<td>#C04F17</td>
+						<td>rgb(192, 79, 23)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #221E1F"></div>
+						</td>
+						<td>Black</td>
+						<td>#221E1F</td>
+						<td>rgb(34, 30, 31)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #2D2F92"></div>
+						</td>
+						<td>Blue</td>
+						<td>#2D2F92</td>
+						<td>rgb(45, 47, 146)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #00B3B8"></div>
+						</td>
+						<td>BlueGreen</td>
+						<td>#00B3B8</td>
+						<td>rgb(0, 179, 184)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #473992"></div>
+						</td>
+						<td>BlueViolet</td>
+						<td>#473992</td>
+						<td>rgb(71, 57, 146)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #B6321C"></div>
+						</td>
+						<td>BrickRed</td>
+						<td>#B6321C</td>
+						<td>rgb(182, 50, 28)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #792500"></div>
+						</td>
+						<td>Brown</td>
+						<td>#792500</td>
+						<td>rgb(121, 37, 0)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #F7921D"></div>
+						</td>
+						<td>BurntOrange</td>
+						<td>#F7921D</td>
+						<td>rgb(247, 146, 29)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #74729A"></div>
+						</td>
+						<td>CadetBlue</td>
+						<td>#74729A</td>
+						<td>rgb(116, 114, 154)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #F282B4"></div>
+						</td>
+						<td>CarnationPink</td>
+						<td>#F282B4</td>
+						<td>rgb(242, 130, 180)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #00A2E3"></div>
+						</td>
+						<td>Cerulean</td>
+						<td>#00A2E3</td>
+						<td>rgb(0, 162, 227)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #41B0E4"></div>
+						</td>
+						<td>CornflowerBlue</td>
+						<td>#41B0E4</td>
+						<td>rgb(65, 176, 228)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #00AEEF"></div>
+						</td>
+						<td>Cyan</td>
+						<td>#00AEEF</td>
+						<td>rgb(0, 174, 239)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #FDBC42"></div>
+						</td>
+						<td>Dandelion</td>
+						<td>#FDBC42</td>
+						<td>rgb(253, 188, 66)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #A4538A"></div>
+						</td>
+						<td>DarkOrchid</td>
+						<td>#A4538A</td>
+						<td>rgb(164, 83, 138)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #00A99D"></div>
+						</td>
+						<td>Emerald</td>
+						<td>#00A99D</td>
+						<td>rgb(0, 169, 157)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #009B55"></div>
+						</td>
+						<td>ForestGreen</td>
+						<td>#009B55</td>
+						<td>rgb(0, 155, 85)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #8C368C"></div>
+						</td>
+						<td>Fuchsia</td>
+						<td>#8C368C</td>
+						<td>rgb(140, 54, 140)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #FFDF42"></div>
+						</td>
+						<td>Goldenrod</td>
+						<td>#FFDF42</td>
+						<td>rgb(255, 223, 66)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #949698"></div>
+						</td>
+						<td>Gray</td>
+						<td>#949698</td>
+						<td>rgb(148, 150, 152)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #00A64F"></div>
+						</td>
+						<td>Green</td>
+						<td>#00A64F</td>
+						<td>rgb(0, 166, 79)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #DFE674"></div>
+						</td>
+						<td>GreenYellow</td>
+						<td>#DFE674</td>
+						<td>rgb(223, 230, 116)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #00A99A"></div>
+						</td>
+						<td>JungleGreen</td>
+						<td>#00A99A</td>
+						<td>rgb(0, 169, 154)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #F49EC4"></div>
+						</td>
+						<td>Lavender</td>
+						<td>#F49EC4</td>
+						<td>rgb(244, 158, 196)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #8DC73E"></div>
+						</td>
+						<td>LimeGreen</td>
+						<td>#8DC73E</td>
+						<td>rgb(141, 199, 62)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #EC008C"></div>
+						</td>
+						<td>Magenta</td>
+						<td>#EC008C</td>
+						<td>rgb(236, 0, 140)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #A9341F"></div>
+						</td>
+						<td>Mahogany</td>
+						<td>#A9341F</td>
+						<td>rgb(169, 52, 31)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #AF3235"></div>
+						</td>
+						<td>Maroon</td>
+						<td>#AF3235</td>
+						<td>rgb(175, 50, 53)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #F89E7B"></div>
+						</td>
+						<td>Melon</td>
+						<td>#F89E7B</td>
+						<td>rgb(248, 158, 123)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #006795"></div>
+						</td>
+						<td>MidnightBlue</td>
+						<td>#006795</td>
+						<td>rgb(0, 103, 149)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #A93C93"></div>
+						</td>
+						<td>Mulberry</td>
+						<td>#A93C93</td>
+						<td>rgb(169, 60, 147)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #006EB8"></div>
+						</td>
+						<td>NavyBlue</td>
+						<td>#006EB8</td>
+						<td>rgb(0, 110, 184)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #3C8031"></div>
+						</td>
+						<td>OliveGreen</td>
+						<td>#3C8031</td>
+						<td>rgb(60, 128, 49)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #F58137"></div>
+						</td>
+						<td>Orange</td>
+						<td>#F58137</td>
+						<td>rgb(245, 129, 55)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #ED135A"></div>
+						</td>
+						<td>OrangeRed</td>
+						<td>#ED135A</td>
+						<td>rgb(237, 19, 90)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #AF72B0"></div>
+						</td>
+						<td>Orchid</td>
+						<td>#AF72B0</td>
+						<td>rgb(175, 114, 176)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #F7965A"></div>
+						</td>
+						<td>Peach</td>
+						<td>#F7965A</td>
+						<td>rgb(247, 150, 90)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #7977B8"></div>
+						</td>
+						<td>Periwinkle</td>
+						<td>#7977B8</td>
+						<td>rgb(121, 119, 184)</td>
+					</tr>
+					<td>
+						<div class="color-box" style="background: #008B72"></div>
+					</td>
+					<td>PineGreen</td>
+					<td>#008B72</td>
+					<td>rgb(0, 139, 114)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #92268F"></div>
+						</td>
+						<td>Plum</td>
+						<td>#92268F</td>
+						<td>rgb(146, 38, 143)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #00B0F0"></div>
+						</td>
+						<td>ProcessBlue</td>
+						<td>#00B0F0</td>
+						<td>rgb(0, 176, 240)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #99479B"></div>
+						</td>
+						<td>Purple</td>
+						<td>#99479B</td>
+						<td>rgb(153, 71, 155)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #974006"></div>
+						</td>
+						<td>RawSienna</td>
+						<td>#974006</td>
+						<td>rgb(151, 64, 6)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #ED1B23"></div>
+						</td>
+						<td>Red</td>
+						<td>#ED1B23</td>
+						<td>rgb(237, 27, 35)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #F26035"></div>
+						</td>
+						<td>RedOrange</td>
+						<td>#F26035</td>
+						<td>rgb(242, 96, 53)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #A1246B"></div>
+						</td>
+						<td>RedViolet</td>
+						<td>#A1246B</td>
+						<td>rgb(161, 36, 107)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #EF559F"></div>
+						</td>
+						<td>Rhodamine</td>
+						<td>#EF559F</td>
+						<td>rgb(239, 85, 159)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #613F99"></div>
+						</td>
+						<td>RoyalBlue</td>
+						<td>#613F99</td>
+						<td>rgb(97, 63, 153)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #ED017D"></div>
+						</td>
+						<td>RubineRed</td>
+						<td>#ED017D</td>
+						<td>rgb(237, 1, 125)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #F69289"></div>
+						</td>
+						<td>Salmon</td>
+						<td>#F69289</td>
+						<td>rgb(246, 146, 137)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #3FBC9D"></div>
+						</td>
+						<td>SeaGreen</td>
+						<td>#3FBC9D</td>
+						<td>rgb(63, 188, 157)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #671800"></div>
+						</td>
+						<td>Sepia</td>
+						<td>#671800</td>
+						<td>rgb(103, 24, 0)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #46C5DD"></div>
+						</td>
+						<td>SkyBlue</td>
+						<td>#46C5DD</td>
+						<td>rgb(70, 197, 221)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #C6DC67"></div>
+						</td>
+						<td>SpringGreen</td>
+						<td>#C6DC67</td>
+						<td>rgb(198, 220, 103)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #DA9D76"></div>
+						</td>
+						<td>Tan</td>
+						<td>#DA9D76</td>
+						<td>rgb(218, 157, 118)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #00AEB3"></div>
+						</td>
+						<td>TealBlue</td>
+						<td>#00AEB3</td>
+						<td>rgb(0, 174, 179)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #D883B7"></div>
+						</td>
+						<td>Thistle</td>
+						<td>#D883B7</td>
+						<td>rgb(216, 131, 183)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #00B4CE"></div>
+						</td>
+						<td>Turquoise</td>
+						<td>#00B4CE</td>
+						<td>rgb(0, 180, 206)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #58429B"></div>
+						</td>
+						<td>Violet</td>
+						<td>#58429B</td>
+						<td>rgb(88, 66, 155)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #EF58A0"></div>
+						</td>
+						<td>VioletRed</td>
+						<td>#EF58A0</td>
+						<td>rgb(239, 88, 160)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #FFFFFF"></div>
+						</td>
+						<td>White</td>
+						<td>#FFFFFF</td>
+						<td>rgb(255, 255, 255)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #EE2967"></div>
+						</td>
+						<td>WildStrawberry</td>
+						<td>#EE2967</td>
+						<td>rgb(238, 41, 103)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #FFF200"></div>
+						</td>
+						<td>Yellow</td>
+						<td>#FFF200</td>
+						<td>rgb(255, 242, 0)</td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div class="color-box" style="background: #98CC70"></div>
+						</td>
+						<td>YellowGreen</td>
+						<td>#98CC70</td>
+						<td>rgb(152, 204, 112)</td>
+					</tr>
+					<tr>
+						<td>
+							<div class="color-box" style="background: #FAA21A"></div>
+						</td>
+						<td>YellowOrange</td>
+						<td>#FAA21A</td>
+						<td>rgb(250, 162, 26)</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+		<div class="footer" style="text-align: right">
+			<button class="btn btn-basic" data-dismiss="modal">Close</button>
+		</div>
+	</div>
+</div>
+<!-- BACKGROUNDS MODAL -->
+<div class="modal" style="width: 500px" id="backgrounds" can-be-closed="true">
+	<div style="display: none">
+		<div class="header">
+			<div class="title">Backgrounds</div>
+			<button class="modal-btn" data-dismiss="modal">&times;</button>
+		</div>
+		<div class="body">
+			<b style="color:midnightblue">Bbox background:</b>
+			<div style="background-color: #F8F9FA; padding: 5px; margin-bottom: 8px">
+				<code>\bbox[yellow]{x^{2}+1}</code>
+			</div>
+			<div style="width:53px; height:19px; margin-bottom: 8px; text-align: center; margin: 0px auto">
+				<div class="myFullImg26" style="width:53px; height:19px; background-position: bottom 19px right 53px"></div>
+			</div>
+			<hr />
+			<b style="color:midnightblue">Bbox (with HEX color code):</b>
+			<div style="background-color: #F8F9FA; padding: 5px; margin-bottom: 8px">
+				<code>\bbox[#CC3333]{\color{white}{x^{2}+1}}</code>
+			</div>
+			<div style="width:53px; height:19px; margin-bottom: 8px; text-align: center; margin: 0px auto">
+				<div class="myFullImg26" style="width:53px; height:19px; background-position: bottom 38px right 53px"></div>
+			</div>
+			<hr />
+			<b style="color:midnightblue">Bbox with padding:</b>
+			<div style="background-color: #F8F9FA; padding: 5px; margin-bottom: 8px">
+				<code>\bbox[orange, 8px]{x^{2}+1}</code>
+			</div>
+			<div style="width:69px; height:36px; margin-bottom: 8px; text-align: center; margin: 0px auto">
+				<div class="myFullImg26" style="width:69px; height:36px; background-position: bottom 74px right 69px"></div>
+			</div>
+			<hr />
+			<b style="color:midnightblue">Boxed :</b>
+			<div style="background-color: #F8F9FA; padding: 5px; margin-bottom: 8px">
+				<code>\boxed{\log(x) + \sqrt{1+x^2}}</code>
+			</div>
+			<div style="width:159px; height:37px; margin-bottom: 8px; text-align: center; margin: 0px auto">
+				<div class="myFullImg26" style="width:159px; height:37px; background-position: bottom 167px right 159px"></div>
+			</div>
+			<hr />
+			<b style="color:midnightblue">Framebox :</b>
+			<div style="background-color: #F8F9FA; padding: 5px; margin-bottom: 8px">
+				<code>\framebox{Example of text}</code>
+			</div>
+			<div style="width:143px; height:28px; margin-bottom: 8px; text-align: center; margin: 0px auto">
+				<div class="myFullImg26" style="width:143px; height:28px; background-position: bottom 102px right 143px"></div>
+			</div>
+			<hr />
+			<b style="color:midnightblue">Framebox with width:</b>
+			<div style="background-color: #F8F9FA; padding: 5px; margin-bottom: 8px">
+				<code>\framebox[180px]{Example of text}</code>
+			</div>
+			<div style="width:200px; height:28px; margin-bottom: 8px; text-align: center; margin: 0px auto">
+				<div class="myFullImg26" style="width:200px; height:28px; background-position: bottom 130px right 200px"></div>
+			</div>
+			<hr />
+			<b style="color:midnightblue">Colorbox:</b>
+			<div style="background-color: #F8F9FA; padding: 5px; margin-bottom: 8px">
+				<code>\colorbox{Apricot}{Example of text}</code>
+			</div>
+			<div style="width:143px; height:28px; margin-bottom: 8px; text-align: center; margin: 0px auto">
+				<div class="myFullImg26" style="width:143px; height:28px; background-position: bottom 195px right 143px"></div>
+			</div>
+		</div>
+		<div class="footer" style="text-align: right">
+			<button class="btn btn-basic" data-dismiss="modal">Close</button>
+		</div>
+	</div>
+</div>
+
+<!-- PHYSICS MODAL -->
+<div class="modal" style="width: 680px" id="physics" can-be-closed="true">
+	<div style="display: none">
+		<div class="header">
+			<div class="title">Physics</div>
+			<button class="modal-btn" data-dismiss="modal">&times;</button>
+		</div>
+		<div class="body">
+			<div style="text-align:center">
+				<div class="color-box-title">
+					<h2>Physics</h2>
+				</div>
+				<div style="text-align: left; margin-bottom: 20px">
+					Documentation : <a href="https://ctan.org/pkg/physics?lang=en" target="_blank">Physics</a>
+				</div>
+				<table class="color-box-table">
+					<tr style="background: #F2F2F2">
+						<td>
+							<div style="height:44px; width:32px; display: inline-block;">
+								<div class="myFullImg28" style="height:44px; width:32px; background-position: bottom 44px right 32px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\eval{x}_0^\infty</code></td>
+						<td>
+							<div style="height:48px; width:46px; display: inline-block;">
+								<div class="myFullImg28" style="height:48px; width:46px; background-position: bottom 92px right 46px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\eval(x|_0^\infty</code></td>
+					</tr>
+					<tr>
+						<td>
+							<div style="height:24px; width:55px; display: inline-block;">
+								<div class="myFullImg28" style="height:24px; width:55px; background-position: bottom 116px right 55px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\order{x^2}</code></td>
+						<td>
+							<div style="height:19px; width:48px; display: inline-block;">
+								<div class="myFullImg28" style="height:19px; width:48px; background-position: bottom 135px right 48px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\comm{A}{B}</code></td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div style="height:19px; width:56px; display: inline-block;">
+								<div class="myFullImg28" style="height:19px; width:56px; background-position: bottom 154px right 56px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\acomm{A}{B}</code></td>
+						<td>
+							<div style="height:19px; width:33px; display: inline-block;">
+								<div class="myFullImg28" style="height:19px; width:33px; background-position: bottom 173px right 33px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\grad{\Psi}</code></td>
+					</tr>
+					<tr>
+						<td>
+							<div style="height:19px; width:35px; display: inline-block;">
+								<div class="myFullImg28" style="height:19px; width:35px; background-position: bottom 192px right 35px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\div{\vb{a}}</code></td>
+						<td>
+							<div style="height:19px; width:44px; display: inline-block;">
+								<div class="myFullImg28" style="height:19px; width:44px; background-position: bottom 211px right 44px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\curl{\vb{a}}</code></td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div style="height:22px; width:39px; display: inline-block;">
+								<div class="myFullImg28" style="height:22px; width:39px; background-position: bottom 233px right 39px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\laplacian{\Psi}</code></td>
+						<td>
+							<div style="height:22px; width:95px; display: inline-block;">
+								<div class="myFullImg28" style="height:22px; width:95px; background-position: bottom 255px right 95px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\laplacian(\Psi+A)</code></td>
+					</tr>
+					<tr>
+						<td>
+							<div style="height:19px; width:16px; display: inline-block;">
+								<div class="myFullImg28" style="height:19px; width:16px; background-position: bottom 274px right 16px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\real</code></td>
+						<td>
+							<div style="height:19px; width:11px; display: inline-block;">
+								<div class="myFullImg28" style="height:19px; width:11px; background-position: bottom 293px right 11px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\imaginary</code></td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div style="height:40px; width:30px; display: inline-block;">
+								<div class="myFullImg28" style="height:40px; width:30px; background-position: bottom 333px right 30px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\dv{f}{x}</code></td>
+						<td>
+							<div style="height:40px; width:40px; display: inline-block;">
+								<div class="myFullImg28" style="height:40px; width:40px; background-position: bottom 373px right 40px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\dv[n]{f}{x}</code></td>
+					</tr>
+					<tr>
+						<td>
+							<div style="height:46px; width:119px; display: inline-block;">
+								<div class="myFullImg28" style="height:46px; width:119px; background-position: bottom 419px right 119px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\dv{x}(\frac{x}{x^{2} + 1})</code></td>
+						<td>
+							<div style="height:40px; width:30px; display: inline-block;">
+								<div class="myFullImg28" style="height:40px; width:30px; background-position: bottom 459px right 30px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\pdv{f}{x}</code></td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div style="height:40px; width:40px; display: inline-block;">
+								<div class="myFullImg28" style="height:40px; width:40px; background-position: bottom 499px right 40px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\pdv[n]{f}{x}</code></td>
+						<td>
+							<div style="height:46px; width:119px; display: inline-block;">
+								<div class="myFullImg28" style="height:46px; width:119px; background-position: bottom 545px right 119px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\pdv{x}(\frac{x}{x^{2} + 1})</code></td>
+					</tr>
+					<tr>
+						<td>
+							<div style="height:19px; width:44px; display: inline-block;">
+								<div class="myFullImg28" style="height:19px; width:44px; background-position: bottom 564px right 44px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\bra{\phi}\ket{\psi}</code></td>
+						<td>
+							<div style="height:19px; width:39px; display: inline-block;">
+								<div class="myFullImg28" style="height:19px; width:39px; background-position: bottom 583px right 39px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\braket{a}{b}</code></td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div style="height:46px; width:67px; display: inline-block;">
+								<div class="myFullImg28" style="height:46px; width:67px; background-position: bottom 675px right 67px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\mqty(a & b \\ c & d)</code></td>
+						<td>
+							<div style="height:46px; width:52px; display: inline-block;">
+								<div class="myFullImg28" style="height:46px; width:52px; background-position: bottom 721px right 52px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\mdet{a & b \\ c & d}</code></td>
+					</tr>
+					<tr>
+						<td>
+							<div style="height:73px; width:100px; display: inline-block;">
+								<div class="myFullImg28" style="height:73px; width:100px; background-position: bottom 794px right 100px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\mqty(\dmat{1,2,3})</code></td>
+						<td></td>
+						<td></td>
+					</tr>
+				</table>
+			</div>
+		</div>
+		<div class="footer" style="text-align: right">
+			<button class="btn btn-basic" data-dismiss="modal">Close</button>
+		</div>
+	</div>
+</div>
+
+<!-- CHIMESTRY MODAL -->
+<div class="modal" style="width: 680px" id="chimestry" can-be-closed="true">
+	<div style="display: none">
+		<div class="header">
+			<div class="title">Chimestry</div>
+			<button class="modal-btn" data-dismiss="modal">&times;</button>
+		</div>
+		<div class="body">
+			<div style="text-align:center">
+				<div class="color-box-title">
+					<h2>Chemical equations with <i>mhchem</i></h2>
+				</div>
+				<div style="text-align: left; margin-bottom: 20px">
+					Documentation : <a href="https://mhchem.github.io/MathJax-mhchem/" target="_blank">mhchem for MathJax</a>
+				</div>
+				<table class="color-box-table">
+					<tr style="background: #F2F2F2">
+						<td>
+							<div style="width:27px; height:21px; display: inline-block;">
+								<div class="myFullImg27" style="width:27px; height:21px; background-position: bottom 21px right 27px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\ce{H+}</code></td>
+						<td>
+							<div style="width:64px; height:22px; display: inline-block;">
+								<div class="myFullImg27" style="width:64px; height:22px; background-position: bottom 43px right 64px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\ce{CrO4^2-}</code></td>
+					</tr>
+					<tr>
+						<td>
+							<div style="width:50px; height:19px; display: inline-block;">
+								<div class="myFullImg27" style="width:50px; height:19px; background-position: bottom 62px right 50px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\ce{2 H2O}</code></td>
+						<td>
+							<div style="width:63px; height:22px; display: inline-block;">
+								<div class="myFullImg27" style="width:63px; height:22px; background-position: bottom 84px right 63px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\ce{^{227}_{90}Th+}</code></td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div style="width:70px; height:19px; display: inline-block;">
+								<div class="myFullImg27" style="width:70px; height:19px; background-position: bottom 103px right 70px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\ce{A -> B}</code></td>
+						<td>
+							<div style="width:66px; height:22px; display: inline-block;">
+								<div class="myFullImg27" style="width:66px; height:22px; background-position: bottom 125px right 66px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\ce{A <=> B}</code></td>
+					</tr>
+					<tr>
+						<td>
+							<div style="width:76px; height:30px; display: inline-block;">
+								<div class="myFullImg27" style="width:76px; height:30px; background-position: bottom 155px right 76px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\ce{A ->[H2O] B}</code></td>
+						<td>
+							<div style="width:102px; height:19px; display: inline-block;">
+								<div class="myFullImg27" style="width:102px; height:19px; background-position: bottom 174px right 102px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\ce{C6H5-CHO}</code></td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div style="width:102px; height:22px; display: inline-block;">
+								<div class="myFullImg27" style="width:102px; height:22px; background-position: bottom 196px right 102px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\ce{Fe^{II}Fe^{III}2O4}</code></td>
+						<td>
+							<div style="width:53px; height:19px; display: inline-block;">
+								<div class="myFullImg27" style="width:53px; height:19px; background-position: bottom 215px right 53px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\pu{123 kJ}</code></td>
+					</tr>
+					<tr>
+						<td>
+							<div style="width:74px; height:22px; display: inline-block;">
+								<div class="myFullImg27" style="width:74px; height:22px; background-position: bottom 237px right 74px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\pu{123 mm2}</code></td>
+						<td>
+							<div style="width:64px; height:24px; display: inline-block;">
+								<div class="myFullImg27" style="width:64px; height:24px; background-position: bottom 261px right 64px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\pu{123 kJ//mol}</code></td>
+					</tr>
+					<tr style="background: #F2F2F2">
+						<td>
+							<div style="width:111px; height:22px; display: inline-block;">
+								<div class="myFullImg27" style="width:111px; height:22px; background-position: bottom 283px right 111px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\pu{123 kJ*mol-1}</code></td>
+						<td>
+							<div style="width:90px; height:22px; display: inline-block;">
+								<div class="myFullImg27" style="width:90px; height:22px; background-position: bottom 305px right 90px; display: inline-block;"></div>
+							</div>
+						</td>
+						<td><code>\pu{1.2e3 kJ}</code></td>
+					</tr>
+				</table>
+			</div>
+			<hr />
+			<b style="color:midnightblue">Precipitate and Gas :</b>
+			<div style="background-color: #F8F9FA; padding: 5px; margin-bottom: 8px">
+				<code>\ce{A v B (v) -> B ^ B (^)}</code>
+			</div>
+			<div style="width:187px; height:19px; margin-bottom: 8px; text-align: center; margin: 0px auto">
+				<div class="myFullImg27" style="width:187px; height:19px; background-position: bottom 324px right 187px"></div>
+			</div>
+			<br />
+			<div style="background-color: #F8F9FA; padding: 5px; margin-bottom: 8px">
+				<code>\ce{SO4^2- + Ba^2+ -> BaSO4 v}</code>
+			</div>
+			<div style="width:238px; height:22px; margin-bottom: 8px; text-align: center; margin: 0px auto">
+				<div class="myFullImg27" style="width:238px; height:22px; background-position: bottom 346px right 238px"></div>
+			</div>
+			<hr />
+			<b style="color:midnightblue">Chemical Equations (ce):</b>
+			<div style="background-color: #F8F9FA; padding: 5px; margin-bottom: 8px">
+				<code>\pu{1.2e3 kJ\ce{CO2 + C -> 2 CO}}</code>
+			</div>
+			<div style="width:248px; height:22px; margin-bottom: 8px; text-align: center; margin: 0px auto">
+				<div class="myFullImg27" style="width:248px; height:22px; background-position: bottom 368px right 248px"></div>
+			</div>
+			<br />
+			<div style="background-color: #F8F9FA; padding: 5px; margin-bottom: 8px">
+				<code>\ce{x Na(NH4)HPO4 ->[\Delta] (NaPO3)_x + x NH3 ^ + x H2O}</code>
+			</div>
+			<div style="width:425px; height:30px; margin-bottom: 8px; text-align: center; margin: 0px auto">
+				<div class="myFullImg27" style="width:425px; height:30px; background-position: bottom 469px right 425px"></div>
+			</div>
+			<hr />
+			<b style="color:midnightblue">Concentration:</b>
+			<div style="background-color: #F8F9FA; padding: 5px; margin-bottom: 8px">
+				<code>\ce{$K = \frac{[\ce{Hg^2+}][\ce{Hg}]}{[\ce{Hg2^2+}]}$}</code>
+			</div>
+			<div style="width:140px; height:48px; margin-bottom: 8px; text-align: center; margin: 0px auto">
+				<div class="myFullImg27" style="width:140px; height:48px; background-position: bottom 416px right 140px"></div>
+			</div>
+			<hr />
+			<b style="color:midnightblue">Parentheses, Brackets, Braces:</b>
+			<div style="background-color: #F8F9FA; padding: 5px; margin-bottom: 8px">
+				<code>\ce{CH4 + 2 $\left( \ce{O2 + 79/21 N2} \right)$}</code>
+			</div>
+			<div style="width:186px; height:23px; margin-bottom: 8px; text-align: center; margin: 0px auto">
+				<div class="myFullImg27" style="width:186px; height:23px; background-position: bottom 439px right 186px"></div>
+			</div>
+			<hr />
+			<b style="color:midnightblue">Example:</b>
+			<div style="background-color: #F8F9FA; padding: 5px; margin-bottom: 8px">
+				<code>\ce{Zn^2+ <=>[+ 2OH-][+ 2H+] $\underset{\text{amphoteres Hydroxid}}{\ce{Zn(OH)2 v}}$ <=>[+ 2OH-][+ 2H+] $\underset{\text{Hydroxozikat}}{\ce{[Zn(OH)4]^2-}}$}</code>
+			</div>
+			<div style="width:395px; height:55px; margin-bottom: 8px; text-align: center; margin: 0px auto">
+				<div class="myFullImg27" style="width:395px; height:55px; background-position: bottom 524px right 395px"></div>
+			</div>
+		</div>
+		<div class="footer" style="text-align: right">
+			<button class="btn btn-basic" data-dismiss="modal">Close</button>
+		</div>
+	</div>
+</div>
+
+<!-- EXAMPLES MODAL -->
+<div class="modal" style="width: 500px" id="examples" can-be-closed="true">
+	<div style="display: none">
+		<div class="header">
+			<div class="title">Examples</div>
+			<button class="modal-btn" data-dismiss="modal">&times;</button>
+		</div>
+		<div class="body">
+			<div style="text-align:center">
+				<div class="contour5" style="text-align:center; margin: 0px 15px 15px 15px">
+					<div class="buttoneditor" style="height:60px; width:105px">
+						<div onclick="addExample(1);" class="myFullImg20" style="background-position: bottom 60px right 105px;" data-dismiss="modal"></div>
+					</div>
+				</div>
+				<div class="contour5" style="text-align:center; margin: 0px 15px 15px 15px">
+					<div class="buttoneditor" style="height:60px; width:105px">
+						<div onclick="addExample(2);" class="myFullImg20" style="background-position: bottom 60px right 210px;" data-dismiss="modal"></div>
+					</div>
+				</div>
+				<div class="contour5" style="text-align:center; margin: 0px 15px 15px 15px">
+					<div class="buttoneditor" style="height:60px; width:105px">
+						<div onclick="addExample(3);" class="myFullImg20" style="background-position: bottom 60px right 315px;" data-dismiss="modal"></div>
+					</div>
+				</div>
+				<div style="text-align:center">
+					<div class="contour5" style="text-align:center; margin: 0px 5px 15px 5px">
+						<div class="buttoneditor" style="height:65px; width:150px">
+							<div onclick="addExample(4);" class="myFullImg21" style="background-position: bottom 65px right 150px;" data-dismiss="modal"></div>
+						</div>
+					</div>
+					<div class="contour5" style="text-align:center; margin: 0px 5px 15px 5px">
+						<div class="buttoneditor" style="height:65px; width:150px">
+							<div onclick="addExample(5);" class="myFullImg21" style="background-position: bottom 65px right 300px;" data-dismiss="modal"></div>
+						</div>
+					</div>
+					<div class="contour5" style="text-align:center; margin: 0px 5px 15px 5px">
+						<div class="buttoneditor" style="height:65px; width:150px">
+							<div onclick="addExample(6);" class="myFullImg21" style="background-position: bottom 65px right 450px;" data-dismiss="modal"></div>
+						</div>
+
+					</div>
+					<div class="contour5" style="text-align:center; margin: 0px 5px 15px 5px">
+						<div class="buttoneditor" style="height:65px; width:150px">
+							<div onclick="addExample(7);" class="myFullImg21" style="background-position: bottom 65px right 600px;" data-dismiss="modal"></div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+		<div class="footer" style="text-align: right">
+			<button class="btn btn-basic" data-dismiss="modal">Close</button>
+		</div>
+	</div>
+</div>
+<!-- MATRICES MODAL -->
+<div class="modal" style="width: 500px" id="matrices" can-be-closed="true">
+	<div style="display: none">
+		<div class="header">
+			<div class="title">Matrices</div>
+			<button class="modal-btn" data-dismiss="modal">&times;</button>
+		</div>
+		<form>
+			<div class="body">
+				<div style="text-align:center">
+					<div class="contour5" style="text-align:center; margin: 0px 15px 15px 15px">
+						<label>
+							<input type="radio" name="matrice" value="1" checked="checked" /><br />
+							<div class="buttoneditor" style="height:65px; width:80px">
+								<div class="myFullImg19" style="background-position: bottom 65px right 80px;"></div>
+							</div>
+						</label>
+					</div>
+					<div class="contour5" style="text-align:center; margin: 0px 15px 15px 15px">
+						<label>
+							<input type="radio" name="matrice" value="2" /><br />
+							<div class="buttoneditor" style="height:65px; width:80px">
+								<div class="myFullImg19" style="background-position: bottom 65px right 160px;"></div>
+							</div>
+						</label>
+					</div>
+					<div class="contour5" style="text-align:center; margin: 0px 15px 15px 15px">
+						<label>
+							<input type="radio" name="matrice" value="3" /><br />
+							<div class="buttoneditor" style="height:65px; width:80px">
+								<div class="myFullImg19" style="background-position: bottom 65px right 240px;"></div>
+							</div>
+						</label>
+					</div>
+				</div>
+				<div style="text-align:center">
+					<div class="contour5" style="text-align:center; margin: 0px 15px 15px 15px">
+						<label>
+							<input type="radio" name="matrice" value="4" /><br />
+							<div class="buttoneditor" style="height:65px; width:80px">
+								<div class="myFullImg19" style="background-position: bottom 130px right 80px;"></div>
+							</div>
+						</label>
+					</div>
+					<div class="contour5" style="text-align:center; margin: 0px 15px 15px 15px">
+						<label>
+							<input type="radio" name="matrice" value="5" /><br />
+							<div class="buttoneditor" style="height:65px; width:80px">
+								<div class="myFullImg19" style="background-position: bottom 130px right 160px;"></div>
+							</div>
+						</label>
+					</div>
+					<div class="contour5" style="text-align:center; margin: 0px 15px 15px 15px">
+						<label>
+							<input type="radio" name="matrice" value="6" /><br />
+							<div class="buttoneditor" style="height:65px; width:80px">
+								<div class="myFullImg19" style="background-position: bottom 130px right 240px;"></div>
+							</div>
+						</label>
+					</div>
+				</div>
+				<div style="box-sizing: border-box; margin: 12px 0px">
+					<label>
+						<b>Rows:</b><br />
+						<input type="text" name="rows" placeholder="Rows" class="form-control" value="3" />
+					</label>
+				</div>
+				<div style="box-sizing: border-box; margin: 12px 0px">
+					<label>
+						<b>Columns:</b><br />
+						<input type="text" name="columns" placeholder="Columns" class="form-control" value="3" />
+					</label>
+				</div>
+			</div>
+			<div class="footer" style="text-align: right">
+				<button type="button" class="btn btn-basic" data-dismiss="modal">Close</button>
+				<button type="button" class="btn btn-primary" onclick="addMatrix(this.form);" data-dismiss="modal">Apply</button>
+			</div>
+		</form>
+	</div>
+</div>
+<!-- LATEX MODAL -->
+<div class="modal" style="width: 500px" id="latex" can-be-closed="true">
+	<div style="display: none">
+		<div class="header">
+			<div class="title">Latex</div>
+			<button class="modal-btn" data-dismiss="modal">&times;</button>
+		</div>
+		<div class="body">
+			<b style="color:midnightblue">Special symbols:</b>
+			<div style="background-color: #F8F9FA; padding: 5px; margin-bottom: 8px">
+				<code>\# \$ \% \& \_ \{ \}</code>
+			</div>
+			<div style="height:20px; width:450px; margin-bottom: 8px">
+				<div class="myFullImg23" style="background-position: bottom 20px right 450px"></div>
+			</div>
+			<hr />
+			<b style="color:midnightblue">Spaces:</b>
+			<div style="background-color: #F8F9FA; padding: 5px; margin-bottom: 5px">
+				<code>h \! h h \, h \> h \; h \ h \quad h \qquad h</code>
+			</div>
+			<div style="height:14px; width:450px; margin-bottom: 8px">
+				<div class="myFullImg23" style="height:14px; width:450px; background-position: bottom 34px right 450px"></div>
+			</div>
+			<hr />
+			<b style="color:midnightblue">Sizes:</b>
+			<div style="background-color: #F8F9FA; padding: 5px; margin-bottom: 5px">
+				<code>( \big( \Big( \bigg( \Bigg(</code>
+			</div>
+			<div style="height:60px; width:450px; margin-bottom: 8px">
+				<div class="myFullImg23" style="height:60px; width:450px; background-position: bottom 94px right 450px"></div>
+			</div>
+			<hr />
+			<b style="color:midnightblue">Fractions:</b>
+			<div style="background-color: #F8F9FA; padding: 5px; margin-bottom: 5px">
+				<code>\tfrac{1}{2} + \frac{1}{3} + \frac{1+\frac{1}{4}}{5} + \frac{1+\dfrac{1}{6}}{7}</code>
+			</div>
+			<div style="height:57px; width:450px">
+				<div class="myFullImg23" style="height:57px; width:450px; background-position: bottom 151px right 450px"></div>
+			</div>
+		</div>
+		<div class="footer" style="text-align: right">
+			<button class="btn btn-basic" data-dismiss="modal">Close</button>
+		</div>
+	</div>
+</div>
+<!-- Overlay -->
+<div id="overlay"></div>
+<div id="overlay2">
+	<div class="message">
+		<div class="overlay-loading"></div>
+		<div>Loading...</div>
+	</div>
+</div>
+<!--googleon: all-->
+<!-- Scripts -->
+<script src="./public/scripts/all.js"></script>
+<script src="./public/scripts/script2.js"></script>
+</body>
+</html>
